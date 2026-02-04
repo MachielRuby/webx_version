@@ -1,12 +1,32 @@
-export async function startXRSession(renderer, onSessionEnd) {
+export async function startXRSession(renderer, onSessionEnd, options = {}) {
   if (!navigator.xr) {
     throw new Error('当前浏览器不支持 WebXR')
   }
 
-  const session = await navigator.xr.requestSession('immersive-ar', {
+  const { domOverlayRoot } = options
+  const optionalFeatures = ['hit-test', 'anchors']
+  const sessionOptions = {
     requiredFeatures: ['local'],
-    optionalFeatures: ['hit-test', 'anchors'],
-  })
+    optionalFeatures,
+  }
+  if (domOverlayRoot) {
+    optionalFeatures.push('dom-overlay')
+    sessionOptions.domOverlay = { root: domOverlayRoot }
+  }
+
+  let session
+  try {
+    session = await navigator.xr.requestSession('immersive-ar', sessionOptions)
+  } catch (error) {
+    if (domOverlayRoot) {
+      session = await navigator.xr.requestSession('immersive-ar', {
+        requiredFeatures: ['local'],
+        optionalFeatures: ['hit-test', 'anchors'],
+      })
+    } else {
+      throw error
+    }
+  }
 
   renderer.xr.setReferenceSpaceType('local')
   await renderer.xr.setSession(session)

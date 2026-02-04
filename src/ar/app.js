@@ -27,6 +27,7 @@ export function initApp(mountEl) {
     selectedModelId: null,
     anchors: [],
     placed: [],
+    onSelectHandler: null,
   }
 
   const ui = createUI(uiContainer, modelCatalog, {
@@ -41,18 +42,32 @@ export function initApp(mountEl) {
 
   async function startXR() {
     const { session, referenceSpace, hitTestSource, transientHitTestSource } =
-      await startXRSession(renderer, handleSessionEnd)
+      await startXRSession(renderer, handleSessionEnd, {
+        domOverlayRoot: uiContainer,
+      })
     state.session = session
     state.referenceSpace = referenceSpace
     state.hitTestSource = hitTestSource
     state.transientHitTestSource = transientHitTestSource
+    state.onSelectHandler = () => {
+      if (state.isPlacing) {
+        confirmPlacement()
+      }
+    }
+    session.addEventListener('select', state.onSelectHandler)
     ui.setArRunning(true)
     ui.setStatus('AR 已连接')
     ui.setTips('移动设备以识别平面，触摸可拖动')
     renderer.setAnimationLoop(onXRFrame)
+    if (state.selectedModelId) {
+      beginPlacement(state.selectedModelId).catch((err) => ui.setTips(err.message))
+    }
   }
 
   function handleSessionEnd() {
+    if (state.session && state.onSelectHandler) {
+      state.session.removeEventListener('select', state.onSelectHandler)
+    }
     state.session = null
     state.referenceSpace = null
     state.hitTestSource = null
@@ -69,9 +84,13 @@ export function initApp(mountEl) {
     ui.setActiveModel(modelId)
     state.selectedModelId = modelId
     if (!state.session) {
-      ui.setTips('请先进入 AR，再放置模型')
+      ui.setTips('已选择模型，进入 AR 后可放置')
       return
     }
+    await beginPlacement(modelId)
+  }
+
+  async function beginPlacement(modelId) {
     if (state.preview) {
       scene.remove(state.preview)
       state.preview = null
